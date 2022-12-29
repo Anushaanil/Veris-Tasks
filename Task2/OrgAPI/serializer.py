@@ -12,12 +12,12 @@ class RoleSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class EmployeeSerializer(serializers.ModelSerializer):
-    #rname = serializers.CharField(source='role.role_name')
+    role_rank = serializers.CharField(source='role.role_rank')
     #mgr_id = Employee.objects.values_list('manager_id', flat=True)
 
     class Meta:
         model = Employee
-        fields = ['first_name','last_name','role','manager_id']
+        fields = ['emp_id','first_name','role','role_rank']
 
 class EmployeeMgrSerializer(serializers.ModelSerializer):
     class Meta:
