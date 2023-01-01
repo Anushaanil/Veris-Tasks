@@ -1,7 +1,11 @@
 from django.shortcuts import render
-from .serializer import EmployeeMgrSerializer, EmployeeSerializer, RoleSerializer
+from django.http import JsonResponse, HttpResponse
+from .serializer import EmployeeMgrSerializer, RoleSerializer
 from .models import Employee, Role, Department
 from rest_framework import generics
+from rest_framework.views import APIView
+import json
+from django.db.models import Q
 
 def get_json_data():
     employees = {}
@@ -31,6 +35,17 @@ def get_json_data():
             v[k]['department'] = str(department)
             
     return employees
+
+def add_children(node, data):
+    for item in data:
+        if item['manager_id'] == node['emp_id']:
+            item_role = Role.objects.get(role_id = item['role']).role_name
+            item_name = item['first_name']+ ' ' + item['last_name']
+
+            child = {'emp_id':item['emp_id'], 'name': item_name, 'role': item_role, 'children':[]}
+
+            node['children'].append(child)
+            add_children(child, data)
 
 class EmployeeParentDetails(generics.GenericAPIView):
     serializer_class = EmployeeMgrSerializer
@@ -66,34 +81,62 @@ class EmployeeChildrenDetails(generics.GenericAPIView):
         
         return render(request, 'children_details.html', {'children_details': data})
 
-class EmployeeHierarchy(generics.ListAPIView):
-    http_method_names = ["get"]
-    serializer_class = EmployeeSerializer
+class EmployeeHierarchy(APIView):
+
+    def get(self, *args, **kwargs):
+
+        emps = Employee.objects.values('emp_id','first_name','last_name','role','manager_id').order_by('-role')
     
-    def get_queryset(self):
-        d = {}
-        roles = list(Role.objects.values('role_rank','role_id'))
-      
-        for k in roles:
-            employees = Employee.objects.filter(role = k['role_id'])
+        data = [val for val in emps]
+        
+        root_node = emps.get(manager_id = None)
 
-            for emp in employees:
-                emp_details = {
-                        'emp_name' : emp.first_name+' '+emp.last_name,
-                        'role_name' : emp.role.role_name,
-                        'children' : {}
-                }
-                
-            if k['role_rank'] in d:
-                d[k['role_rank']] += [emp_details]
-            else:
-                d[k['role_rank']] = [emp_details]
+        root_role = Role.objects.get(role_id = root_node['role']).role_name
+        root_name = root_node['first_name'] + ' ' + root_node['last_name']
 
-        print(d)
+        root = {'emp_id':root_node['emp_id'],
+                'name': root_name,
+                'role': root_role,
+                'children':[]
+               }
        
-        queryset = Employee.objects.all().order_by('-role')
-        return queryset
+        add_children(root, data)
 
+        return JsonResponse(root, safe=False, json_dumps_params={'indent':2})
+        
 class DisplayRoles(generics.ListAPIView):
     serializer_class = RoleSerializer
     queryset = Role.objects.all().order_by('role_rank')
+
+class CheckEmployeeExists(generics.GenericAPIView):
+    serializer_class = EmployeeMgrSerializer
+    emp_obj  = EmployeeHierarchy()
+    data = emp_obj.get().content
+    json_data = json.loads(data)
+    
+    #print(json_data)
+
+    def post(self,request):
+        emp_id = request.data.get('emp_id')
+        mgr_id = request.data.get('manager_id')
+
+        data = list(Employee.objects.filter(emp_id= emp_id))
+        return HttpResponse(data)
+
+        '''
+        try:
+            emp = Employee.objects.get(emp_id = emp_id)
+            mgr = Employee.objects.get(emp_id = mgr_id)
+
+            if emp and mgr:
+            
+            if Employee.objects.filter(Q(emp_id= emp_id), Q(emp_id=mgr_id)).exists():
+            
+            data = Employee.objects.filter(emp_id= emp_id)
+            return JsonResponse({"data" : data}, safe=False)
+            else:
+                return JsonResponse({"error" : "Employee doesn't exists!"}, safe=False)
+        except:
+            return JsonResponse({"error" : "invalid employee or manager Id"}, safe=False)
+
+        '''

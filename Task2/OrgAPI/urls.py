@@ -3,12 +3,14 @@ from .views import (
     EmployeeParentDetails, 
     EmployeeChildrenDetails, 
     EmployeeHierarchy,
-    DisplayRoles
+    DisplayRoles,
+    CheckEmployeeExists
 )
 
 urlpatterns = [
     path('display/parent/', EmployeeParentDetails.as_view()),
     path('display/children/', EmployeeChildrenDetails.as_view()),
     path('display/hierarchy/', EmployeeHierarchy.as_view()),
-    path('display/rhierarchy/', DisplayRoles.as_view()),
+    path('display/roles/', DisplayRoles.as_view()),
+    path('display/check/', CheckEmployeeExists.as_view()),
 ]
