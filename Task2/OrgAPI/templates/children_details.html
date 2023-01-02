@@ -1,0 +1,7 @@
+<!--{{children_details}}-->
+
+{% for i in children_details%}
+    {% for k, v in i.items %}
+        {{k}} : {{v}} <br>
+    {% endfor %} <br>
+{%endfor%}
