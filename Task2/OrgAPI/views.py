@@ -5,7 +5,7 @@ from .models import Employee, Role, Department
 from rest_framework import generics
 from rest_framework.views import APIView
 import json
-from django.db.models import Q
+
 
 def get_json_data():
     employees = {}
@@ -38,16 +38,32 @@ def get_json_data():
 
 def add_children(node, data):
     for item in data:
-        if item['manager_id'] == node['emp_id']:
+        if item['manager_id'] == node[list(node.keys())[0]]['emp_id']:
             item_role = Role.objects.get(role_id = item['role']).role_name
             item_name = item['first_name']+ ' ' + item['last_name']
 
-            child = {'emp_id':item['emp_id'], 'name': item_name, 'role': item_role, 'children':[]}
+            child = {item['emp_id']:{'emp_id':item['emp_id'], 'name': item_name, 'role': item_role, 'children':[]}}
 
-            node['children'].append(child)
+            node[list(node.keys())[0]]['children'].append(child)
             add_children(child, data)
 
+def find_val(d, k):
+    if str(k) in d: return d[str(k)]
+    for v in d.values():
+        if isinstance(v, dict):
+            a = find_val(v, k)
+            if a is not None: return a
+
+        elif isinstance(v,list):
+            for i in v:
+                if isinstance(i, dict):
+                    a = find_val(i, k)
+                    if a is not None: return a
+    return None
+
 class EmployeeParentDetails(generics.GenericAPIView):
+    ''' Fetch Parent Details of an Employee using Employee ID'''
+
     serializer_class = EmployeeMgrSerializer
 
     def post(self,request):
@@ -55,33 +71,43 @@ class EmployeeParentDetails(generics.GenericAPIView):
 
         try:
             emp = Employee.objects.get(emp_id = emp_id)
-            parent_detail = Employee.objects.get(emp_id = emp.manager_id)
 
-            parent_details = {
-                                'emp_id' : parent_detail.emp_id,
-                                'name' : parent_detail.first_name + ' ' + parent_detail.last_name,
-                                'role' : parent_detail.role.role_name
-                            }
+            if emp:
+                if emp.manager_id:
+                    parent_detail = Employee.objects.get(emp_id = emp.manager_id)
+                    parent_details = {'emp_id' : parent_detail.emp_id,
+                                        'name' : parent_detail.first_name + ' ' + parent_detail.last_name,
+                                        'role' : parent_detail.role.role_name }
+                else:
+                    parent_details = {"error" : "This employee node is a top node!"}
         except:
-            parent_details = {
-                "error" : "invalid employee Id"
-            }
-        return render(request, 'parent_details.html', {'parent_details':parent_details})
+            parent_details = {"error" : "invalid employee Id"}
+
+        return render(request, 'parent_details.html', {'parent_details': parent_details})
 
 class EmployeeChildrenDetails(generics.GenericAPIView):
+    ''' Fetch Children Details of an Employee using Employee ID'''
+
     serializer_class = EmployeeMgrSerializer
 
     def post(self,request):
         emp_id = request.data.get('emp_id')
         try:
+            emp = Employee.objects.get(emp_id = emp_id)
+            if emp:
                 res = get_json_data()
-                data = res[emp_id]
+
+                if res.get(emp_id):
+                    data = res[emp_id]
+                else:
+                    data = [{"error" : "This employee node is a leaf node!"}]
         except:
             data = [{"error" : "invalid employee Id"}]
         
         return render(request, 'children_details.html', {'children_details': data})
 
 class EmployeeHierarchy(APIView):
+    ''' Display the entire Organization Structure'''
 
     def get(self, *args, **kwargs):
 
@@ -94,49 +120,44 @@ class EmployeeHierarchy(APIView):
         root_role = Role.objects.get(role_id = root_node['role']).role_name
         root_name = root_node['first_name'] + ' ' + root_node['last_name']
 
-        root = {'emp_id':root_node['emp_id'],
-                'name': root_name,
-                'role': root_role,
-                'children':[]
-               }
+        root = {root_node['emp_id']:
+        {'emp_id':root_node['emp_id'], 'name': root_name, 'role': root_role, 'children':[]}}
        
         add_children(root, data)
 
         return JsonResponse(root, safe=False, json_dumps_params={'indent':2})
         
 class DisplayRoles(generics.ListAPIView):
+    ''' Display all the Roles of an Organization '''
+
     serializer_class = RoleSerializer
     queryset = Role.objects.all().order_by('role_rank')
 
 class CheckEmployeeExists(generics.GenericAPIView):
+    ''' Check if an Employee exists under the specified Manager Hierarchy '''
+    
     serializer_class = EmployeeMgrSerializer
+
     emp_obj  = EmployeeHierarchy()
     data = emp_obj.get().content
     json_data = json.loads(data)
     
-    #print(json_data)
-
     def post(self,request):
         emp_id = request.data.get('emp_id')
         mgr_id = request.data.get('manager_id')
 
         data = list(Employee.objects.filter(emp_id= emp_id))
-        return HttpResponse(data)
 
-        '''
-        try:
-            emp = Employee.objects.get(emp_id = emp_id)
-            mgr = Employee.objects.get(emp_id = mgr_id)
+        if data:
+            try:
+                hierarchy = find_val(self.json_data, mgr_id)
 
-            if emp and mgr:
-            
-            if Employee.objects.filter(Q(emp_id= emp_id), Q(emp_id=mgr_id)).exists():
-            
-            data = Employee.objects.filter(emp_id= emp_id)
-            return JsonResponse({"data" : data}, safe=False)
-            else:
-                return JsonResponse({"error" : "Employee doesn't exists!"}, safe=False)
-        except:
-            return JsonResponse({"error" : "invalid employee or manager Id"}, safe=False)
+                if(find_val(hierarchy, emp_id)):
+                    return HttpResponse(True)
+                else:
+                    return HttpResponse(False)
+            except:
+                return HttpResponse('Invalid Manager Id!')
+        else:
+            return HttpResponse('Invalid Employee Id!')
 
-        '''
