@@ -14,5 +14,7 @@ This Application is based on Django Rest Framework and uses Swagger for API docu
 ### APIs available to use for Task 2 are:
     - Display the entire hierarchy of organization
     - Display parent of particular employee
-    - Display child of particular employee
+    - Display children of particular employee
+    - Display the entire roles of organization
+    - Display the entire departments of organization
     - Check if particular employee exists under a given employee's hierarchy
